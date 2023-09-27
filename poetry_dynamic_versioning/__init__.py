@@ -15,6 +15,12 @@ import tomlkit
 
 _BYPASS_ENV = "POETRY_DYNAMIC_VERSIONING_BYPASS"
 _OVERRIDE_ENV = "POETRY_DYNAMIC_VERSIONING_OVERRIDE"
+STAGE_MAPPINGS = {
+    "a": "alpha",
+    "b": "beta",
+    "c": "candidate",
+    "rc": "candidate",
+}
 
 
 class _ProjectState:
@@ -399,6 +405,25 @@ def _substitute_version_in_text(version: str, content: str, patterns: Sequence[_
             insert = ", ".join(parts)
             if len(parts) == 1:
                 insert += ","
+        elif pattern.mode == "version_info":
+            # This all assumes major.minor.patch[stage{N}][+metadata]
+            # Which I am not comfortable in contributing upstream.
+            try:
+                match = re.match(r"^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<micro>\d+)((?P<stage>a|b|rc)(?P<revision>\d+)?)?(?:\+(?P<metadata>\w+))?$", version)
+                if match is None:
+                    raise ValueError("Invalid version")
+                stage = match.group("stage")
+                parts = [
+                    match.group("major"),
+                    match.group("minor"),
+                    match.group("micro"),
+                    '"{}"'.format(STAGE_MAPPINGS[stage] if stage else "final"),
+                    match.groupdict().get("revision") or "0",
+                    '"{}"'.format(match.groupdict().get("metadata", ""))
+                ]
+                insert = ", ".join(parts)
+            except (KeyError, ValueError) as e:
+                raise ValueError("Could not parse version into `major.minor.patch[stage{N}][+metadata]`") from e
         else:
             raise ValueError("Invalid substitution mode: {}".format(pattern.mode))
 
